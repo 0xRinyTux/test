@@ -1,0 +1,8 @@
+{
+  "name": "0xRinyTux Repo",
+  "description": "Fork di dogior's had enough",
+  "manifestVersion": 1,
+  "pluginLists": [
+    "https://raw.githubusercontent.com/0xRinyTux/test/builds/plugins.json"
+  ]
+}
