@@ -19,7 +19,7 @@ import kotlin.io.encoding.Base64
 
 class CalcioStreaming : MainAPI() {
     override var lang = "it"
-    override var mainUrl = "https://corner.direttecommunity.online/"
+    override var mainUrl = "https://angolo.direttecommunity.online"
     override var name = "CalcioStreaming"
     override val hasMainPage = true
     override val hasChromecastSupport = true
@@ -129,23 +129,35 @@ class CalcioStreaming : MainAPI() {
     }
 
     private suspend fun extractVideoStream(url: String, name: String): Link? {
-        return if(url.contains("sportsonlinee")){
+        return if (url.contains("sportsonli") || url.contains("sportsonline")) {
             extractSportsOnline(name, url, 0)
-        } else if(url.contains("zicotv")) {
+        } else if (url.contains("bestembeds")) {
+            extractBestEmbeds(name, url)
+        } else if (url.contains("zicotv")) {
             extractZicoTv(name, url)
-        }else {
+        } else {
             null
         }
     }
 
-    private suspend fun extractZicoTv(name: String, url: String): Link?{
-        val resp = app.get(url).document
-        val script = resp.body().selectFirst("script") ?: return null
-        val variable = "ZT_SOURCES ?= ?(.*);".toRegex().find(script.toString())?.groupValues?.firstOrNull() ?: return null
-        val sourceListNormalized = variable.replaceBefore("[{", "").replaceAfterLast("}]", "").replace("\\/", "/")
+    private suspend fun extractBestEmbeds(name: String, url: String): Link? {
+        val doc = app.get(url, referer = "$mainUrl/").body.string()
+        val b64 = "source:\\s*atob\\([\"']([^\"']+)[\"']\\)".toRegex().find(doc)?.groupValues?.getOrNull(1) ?: return null
+        val padded = b64 + "=".repeat((-b64.length % 4 + 4) % 4)
+        val streamUrl = Base64.decode(padded).toString(Charsets.UTF_8)
+        return Link(name = name, url = streamUrl, ref = "https://player.bestembeds.buzz/")
+    }
+
+    private suspend fun extractZicoTv(name: String, url: String): Link? {
+        val resp = app.get(url, referer = "$mainUrl/").document
+        val script = resp.select("script").find { it.data().contains("ZT_SOURCES") || it.html().contains("ZT_SOURCES") } ?: return null
+        val scriptContent = script.data().ifEmpty { script.html() }
+        val variable = "ZT_SOURCES\\s*=\\s*(\\[.*?\\]);".toRegex(RegexOption.DOT_MATCHES_ALL).find(scriptContent)?.groupValues?.getOrNull(1) ?: return null
+        val sourceListNormalized = variable.replace("\\/", "/")
         val sourceList = tryParseJson<List<ZicoTvSources>>(sourceListNormalized) ?: return null
-        val ref = url.split("/").subList(0,3).joinToString("/") + "/"
-       return Link(name=name, url = sourceList[0].url, ref = ref)
+        val usableSource = sourceList.firstOrNull { it.url.isNotEmpty() && !it.url.equals("null", true) } ?: return null
+        val ref = url.split("/").take(3).joinToString("/") + "/"
+        return Link(name = name, url = usableSource.url, ref = ref)
     }
 
     private suspend fun extractSportsOnline(
